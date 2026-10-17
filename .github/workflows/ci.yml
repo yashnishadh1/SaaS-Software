@@ -1,0 +1,124 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Minimal permissions — principle of least privilege
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: Lint · Type-check · Test · Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── Checkout ────────────────────────────────────────────────────────────
+      # SHA for actions/checkout v4.2.2 (2025-01-15 verified)
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0 # Full history for secret scanning
+
+      # ── Secret Scanning (Gitleaks) ──────────────────────────────────────────
+      # Uses the official Gitleaks action with repository config
+      - name: Run Gitleaks secret scanner
+        uses: gitleaks/gitleaks-action@e76b4fa267272782b3a9eecf8c9b2f3d99e0996c # v2.3.9
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+
+      # ── Node.js setup ───────────────────────────────────────────────────────
+      # SHA for actions/setup-node v4.3.0 (2025-01-15 verified)
+      - name: Set up Node.js
+        uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e # v4.3.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      # ── Reproducible install ─────────────────────────────────────────────────
+      - name: Install dependencies (npm ci)
+        run: npm ci
+
+      # ── Prisma client generation ─────────────────────────────────────────────
+      # Must run before typecheck — generates @prisma/client types
+      - name: Generate Prisma client
+        run: npm run db:generate
+
+      # ── Formatting ──────────────────────────────────────────────────────────
+      - name: Check formatting (Prettier)
+        run: npm run format:check
+
+      # ── Linting ─────────────────────────────────────────────────────────────
+      - name: Run ESLint
+        run: npm run lint
+
+      # ── Type checking ────────────────────────────────────────────────────────
+      - name: Run TypeScript type-check
+        run: npm run typecheck
+
+      # ── Tests ────────────────────────────────────────────────────────────────
+      - name: Run automated tests
+        run: npm test
+        env:
+          # Provide minimal env so env validation in tests doesn't fail
+          # No real secrets — unit/integration tests mock external I/O
+          NODE_ENV: test
+
+      # ── Build Verification ───────────────────────────────────────────────────
+      - name: Build monorepo packages and apps
+        run: npm run build
+
+      # ── Dependency audit ─────────────────────────────────────────────────────
+      # Fails on CRITICAL vulnerabilities.
+      # High findings in transitive dev/client deps (@grpc/grpc-js, deepmerge-ts)
+      # are documented in docs/security.md.
+      - name: Dependency vulnerability audit
+        run: npm run audit:check
+
+  postgres-integration:
+    name: Live PostgreSQL & Migration Integration Tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17.4-alpine
+        env:
+          POSTGRES_DB: bizflow_test
+          POSTGRES_USER: bizflow
+          POSTGRES_PASSWORD: test_secure_password_123
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U bizflow -d bizflow_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e # v4.3.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Prisma DB migrations against live PostgreSQL
+        run: npx prisma migrate deploy --schema=./packages/database/prisma/schema.prisma
+        env:
+          DATABASE_URL: postgresql://bizflow:test_secure_password_123@localhost:5432/bizflow_test
+
+      - name: Execute Live Database Verification Suite
+        run: npm test
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgresql://bizflow:test_secure_password_123@localhost:5432/bizflow_test
+          FIREBASE_PROJECT_ID: test-project

@@ -1,0 +1,12 @@
+{
+  "name": "@bizflow/ai",
+  "version": "0.0.1",
+  "private": true,
+  "description": "LLM/AI utilities and agent abstractions — reserved for Phase 3",
+  "scripts": {
+    "typecheck": "echo 'No source yet — reserved for Phase 3'"
+  },
+  "devDependencies": {
+    "typescript": "*"
+  }
+}

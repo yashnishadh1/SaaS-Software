@@ -1,0 +1,12 @@
+{
+  "name": "@bizflow/ui",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Shared UI component library — reserved for Phase 2+",
+  "scripts": {
+    "typecheck": "echo 'No source yet — reserved for Phase 2'"
+  },
+  "devDependencies": {
+    "typescript": "*"
+  }
+}

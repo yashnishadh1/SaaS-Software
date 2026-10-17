@@ -1,0 +1,12 @@
+{
+  "name": "@bizflow/worker",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Background worker service — reserved for Phase 2/3",
+  "scripts": {
+    "typecheck": "echo 'No source yet — reserved for Phase 2/3'"
+  },
+  "devDependencies": {
+    "typescript": "*"
+  }
+}

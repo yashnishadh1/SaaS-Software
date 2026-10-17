@@ -1,0 +1,73 @@
+# BizFlow — Local development infrastructure
+#
+# This file starts PostgreSQL and Redis for LOCAL DEVELOPMENT ONLY.
+# Production infrastructure requires separate configuration including:
+#   - Managed cloud databases with automated backups
+#   - Private networking / VPC
+#   - TLS/mTLS between services
+#   - Secrets injected via a secrets manager (not environment variables in compose)
+#   - Read replicas, connection pooling, point-in-time recovery
+#
+# Usage:
+#   cp .env.example .env          # then edit .env with your local values
+#   docker compose up -d
+#   docker compose down -v        # stop and remove volumes (data loss!)
+
+services:
+  postgres:
+    # Pin to a specific minor+patch to control upgrade timing.
+    # Update this pin intentionally after reviewing release notes.
+    image: postgres:17.4-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-bizflow_dev}
+      POSTGRES_USER: ${POSTGRES_USER:-bizflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      # Bind to localhost only — not exposed to external networks
+      - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-bizflow} -d ${POSTGRES_DB:-bizflow_dev}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - bizflow_internal
+
+  redis:
+    # Pin to a specific minor+patch.
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      # Bind to localhost only
+      - '127.0.0.1:${REDIS_PORT:-6379}:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', '-a', '${REDIS_PASSWORD}', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - bizflow_internal
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  bizflow_internal:
+    driver: bridge
+    internal: false # Set to true when services join this network

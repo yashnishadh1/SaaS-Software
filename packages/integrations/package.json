@@ -1,0 +1,12 @@
+{
+  "name": "@bizflow/integrations",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Third-party integration adapters (payments, CRM, etc.) — reserved for Phase 4",
+  "scripts": {
+    "typecheck": "echo 'No source yet — reserved for Phase 4'"
+  },
+  "devDependencies": {
+    "typescript": "*"
+  }
+}

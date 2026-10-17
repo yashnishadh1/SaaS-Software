@@ -1,0 +1,33 @@
+{
+  "name": "@bizflow/auth",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Firebase Admin authentication middleware and workspace authorization — Phase 2",
+  "type": "commonjs",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./firebase": "./src/firebase.ts",
+    "./middleware": "./src/middleware.ts",
+    "./workspace-access": "./src/workspace-access.ts"
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "typecheck": "tsc --noEmit --project tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "firebase-admin": "^14.5.0",
+    "@bizflow/database": "*"
+  },
+  "devDependencies": {
+    "typescript": "*",
+    "vitest": "^4.1.12",
+    "@types/express": "^5.0.3",
+    "express": "^5.3.0"
+  },
+  "peerDependencies": {
+    "express": "^5.0.0"
+  }
+}

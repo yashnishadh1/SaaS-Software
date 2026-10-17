@@ -1,0 +1,9 @@
+node_modules/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+.next/
+.agents/
+skills-lock.json
+**/.gitkeep

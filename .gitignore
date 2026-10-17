@@ -1,0 +1,69 @@
+# ── Node ────────────────────────────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ── Build outputs ────────────────────────────────────────────────────────────
+dist/
+build/
+out/
+.next/
+.nuxt/
+.output/
+*.tsbuildinfo
+
+# ── Test / Coverage ──────────────────────────────────────────────────────────
+coverage/
+.nyc_output/
+*.lcov
+
+# ── Environment files (NEVER commit real secrets) ────────────────────────────
+# Allow .env.example — it contains only safe placeholder values
+.env
+.env.*
+!.env.example
+
+# ── Credentials and private keys (belt-and-suspenders) ───────────────────────
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+service-account*.json
+*-credentials.json
+*-keyfile.json
+gcp-key*.json
+aws-credentials
+.aws/credentials
+.aws/config
+
+# ── OS & Editor artefacts ────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.iml
+
+# ── Logs ─────────────────────────────────────────────────────────────────────
+logs/
+*.log
+
+# ── Docker override files ─────────────────────────────────────────────────────
+docker-compose.override.yml
+
+# ── Gitleaks report ──────────────────────────────────────────────────────────
+gitleaks-report.json
+
+# ── Agent runtime artefacts ──────────────────────────────────────────────────
+.agents/
+skills-lock.json
+

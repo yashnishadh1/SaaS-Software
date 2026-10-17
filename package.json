@@ -1,0 +1,39 @@
+{
+  "name": "bizflow",
+  "version": "0.0.1",
+  "private": true,
+  "description": "BizFlow — Modular Business Management + AI Automation SaaS (monorepo root)",
+  "workspaces": [
+    "apps/*",
+    "services/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "eslint . --max-warnings 0",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run --reporter=verbose",
+    "test:watch": "vitest --reporter=verbose",
+    "audit:check": "npm audit --audit-level=critical",
+    "audit:full": "npm audit",
+    "db:generate": "npm run db:generate --workspace=@bizflow/database",
+    "prepare": "echo 'Root prepare — nothing to compile at root level'"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^8.71.2",
+    "@typescript-eslint/parser": "^8.71.2",
+    "eslint": "^10.13.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.7",
+    "prettier": "^3.5.3",
+    "typescript": "^5.8.3",
+    "vitest": "^4.1.12"
+  },
+  "engines": {
+    "node": ">=22.0.0",
+    "npm": ">=10.0.0"
+  }
+}

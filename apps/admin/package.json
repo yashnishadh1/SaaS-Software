@@ -1,0 +1,12 @@
+{
+  "name": "@bizflow/admin",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Admin frontend — reserved for Phase 2",
+  "scripts": {
+    "typecheck": "echo 'No source yet — reserved for Phase 2'"
+  },
+  "devDependencies": {
+    "typescript": "*"
+  }
+}

@@ -1,0 +1,32 @@
+# Gitleaks configuration
+# https://github.com/gitleaks/gitleaks
+# Run: gitleaks detect --source=. --config=.gitleaks.toml
+
+title = "BizFlow secret scanner"
+
+[extend]
+# Extend the default ruleset maintained by the Gitleaks project
+useDefault = true
+
+[[rules]]
+id = "bizflow-generic-api-key"
+description = "Catch any variable that looks like an API key or token"
+regex = '''(?i)(api[_-]?key|api[_-]?token|access[_-]?token|secret[_-]?key)\s*[=:]\s*['\"]?[A-Za-z0-9_\-]{20,}['\"]?'''
+tags = ["api", "token", "key"]
+
+[allowlist]
+description = "Paths and values that are safe to ignore"
+paths = [
+  ".env.example",
+  "docs/",
+  "*.md",
+]
+regexes = [
+  # Placeholder patterns used in .env.example and docs
+  "change_me_in_local_only",
+  "replace_with_real_key",
+  "replace_with_real_secret",
+  "replace_with_a_long_random_string",
+  "sk-replace_with_real_key",
+  "sk-ant-replace_with_real_key",
+]

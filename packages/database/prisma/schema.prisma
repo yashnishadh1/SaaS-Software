@@ -1,0 +1,163 @@
+// Generator
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+// Datasource
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// The role a member holds within a workspace.
+/// Roles are strictly ordered: owner > admin > member > viewer.
+enum MemberRole {
+  owner
+  admin
+  member
+  viewer
+}
+
+/// The status of a workspace invitation.
+enum InvitationStatus {
+  pending
+  accepted
+  revoked
+  expired
+}
+
+/// Categories of security-sensitive audit events.
+enum AuditAction {
+  workspace_created
+  workspace_updated
+  member_invited
+  member_joined
+  member_role_changed
+  member_removed
+  invitation_revoked
+  user_profile_updated
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// User profile
+// Firebase owns credential verification and password resets.
+// We store only a reference to the Firebase UID plus display metadata.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model User {
+  id          String   @id @default(cuid())
+  firebaseUid String   @unique @map("firebase_uid")
+  email       String   @unique
+  displayName String?  @map("display_name")
+  avatarUrl   String?  @map("avatar_url")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  memberships WorkspaceMember[]
+  invitations Invitation[]      @relation("InvitedBy")
+  auditEvents AuditEvent[]
+
+  @@index([firebaseUid])
+  @@index([email])
+  @@map("users")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Workspace (tenant)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Workspace {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  members     WorkspaceMember[]
+  invitations Invitation[]
+  auditEvents AuditEvent[]
+
+  @@index([slug])
+  @@map("workspaces")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Workspace membership (junction table)
+// A user may belong to many workspaces with different roles.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model WorkspaceMember {
+  id          String      @id @default(cuid())
+  workspaceId String      @map("workspace_id")
+  userId      String      @map("user_id")
+  role        MemberRole
+  joinedAt    DateTime    @default(now()) @map("joined_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([workspaceId])
+  @@index([userId])
+  @@map("workspace_members")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Invitation
+// Invited by an existing member; token expires after 7 days.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Invitation {
+  id          String           @id @default(cuid())
+  workspaceId String           @map("workspace_id")
+  invitedById String           @map("invited_by_id")
+  email       String
+  role        MemberRole       @default(member)
+  token       String           @unique @default(cuid())
+  status      InvitationStatus @default(pending)
+  expiresAt   DateTime         @map("expires_at")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  workspace  Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  invitedBy  User      @relation("InvitedBy", fields: [invitedById], references: [id], onDelete: Restrict)
+
+  @@index([workspaceId])
+  @@index([email])
+  @@index([token])
+  @@index([status])
+  @@map("invitations")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Audit event
+// Append-only log of security-sensitive actions.
+// Do NOT store secrets, passwords or bearer tokens in this table.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model AuditEvent {
+  id          String      @id @default(cuid())
+  workspaceId String?     @map("workspace_id")
+  actorId     String?     @map("actor_id")
+  action      AuditAction
+  targetType  String?     @map("target_type")
+  targetId    String?     @map("target_id")
+  metadata    Json?
+  createdAt   DateTime    @default(now()) @map("created_at")
+
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  actor     User?      @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([actorId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_events")
+}
