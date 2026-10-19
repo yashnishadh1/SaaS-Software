@@ -26,7 +26,7 @@ jobs:
       # ── Secret Scanning (Gitleaks) ──────────────────────────────────────────
       # Uses the official Gitleaks action with repository config
       - name: Run Gitleaks secret scanner
-        uses: gitleaks/gitleaks-action@e76b4fa267272782b3a9eecf8c9b2f3d99e0996c # v2.3.9
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_CONFIG: .gitleaks.toml

@@ -4,6 +4,7 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { DashboardPage } from './pages/DashboardPage';
+import { CustomersPage } from './pages/CustomersPage';
 
 export function App() {
   return (
@@ -17,6 +18,22 @@ export function App() {
             element={
               <ProtectedRoute>
                 <DashboardPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/customers"
+            element={
+              <ProtectedRoute>
+                <CustomersPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/workspaces/:workspaceId/customers"
+            element={
+              <ProtectedRoute>
+                <CustomersPage />
               </ProtectedRoute>
             }
           />

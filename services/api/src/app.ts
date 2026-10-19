@@ -9,6 +9,7 @@ import { logger } from './logger';
 // ── Route handlers ───────────────────────────────────────────────────────────
 import { meRouter } from './routes/me';
 import { workspacesRouter } from './routes/workspaces';
+import { customersRouter } from './routes/customers';
 
 export function createApp(env: Env): express.Application {
   const app = express();
@@ -72,6 +73,7 @@ export function createApp(env: Env): express.Application {
   app.use('/me', meRouter);
   app.post('/workspaces', workspaceCreateLimiter);
   app.use('/workspaces', workspacesRouter);
+  app.use('/workspaces/:workspaceId/customers', customersRouter);
 
   // ── 404 handler ──────────────────────────────────────────────────────────────
   app.use((_req: Request, res: Response) => {

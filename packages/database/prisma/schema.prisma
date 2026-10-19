@@ -82,6 +82,7 @@ model Workspace {
   members     WorkspaceMember[]
   invitations Invitation[]
   auditEvents AuditEvent[]
+  customers   Customer[]
 
   @@index([slug])
   @@map("workspaces")
@@ -107,6 +108,23 @@ model WorkspaceMember {
   @@index([workspaceId])
   @@index([userId])
   @@map("workspace_members")
+}
+
+model Customer {
+  id          String   @id @default(cuid())
+  workspaceId String   @map("workspace_id")
+  name        String
+  email       String?  @map("email")
+  phone       String?  @map("phone")
+  notes       String?  @map("notes")
+  archived    Boolean  @default(false) @map("archived")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@map("customers")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

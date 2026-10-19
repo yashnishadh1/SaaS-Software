@@ -68,3 +68,21 @@ export const apiEnvSchema = baseEnvSchema.extend({
 });
 
 export type ApiEnv = z.infer<typeof apiEnvSchema>;
+
+export const createCustomerSchema = z.object({
+  name: z.string().min(2, 'Name must be at least 2 characters').max(100).trim(),
+  email: emailSchema.optional(),
+  phone: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+export type CreateCustomerInput = z.infer<typeof createCustomerSchema>;
+
+export const updateCustomerSchema = z.object({
+  name: z.string().min(2).max(100).trim().optional(),
+  email: emailSchema.nullable().optional(),
+  phone: z.string().nullable().optional(),
+  notes: z.string().nullable().optional(),
+});
+
+export type UpdateCustomerInput = z.infer<typeof updateCustomerSchema>;

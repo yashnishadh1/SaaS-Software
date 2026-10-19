@@ -20,6 +20,8 @@
     "audit:check": "npm audit --audit-level=critical",
     "audit:full": "npm audit",
     "db:generate": "npm run db:generate --workspace=@bizflow/database",
+    "db:migrate": "npm run db:migrate --workspace=@bizflow/database",
+    "db:migrate:deploy": "npm run db:migrate:deploy --workspace=@bizflow/database",
     "prepare": "echo 'Root prepare — nothing to compile at root level'"
   },
   "devDependencies": {

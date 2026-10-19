@@ -5,6 +5,7 @@ import {
   paginationSchema,
   passwordSchema,
   slugSchema,
+  updateCustomerSchema,
 } from './index.js';
 
 describe('emailSchema', () => {
@@ -77,5 +78,24 @@ describe('paginationSchema', () => {
 
   it('rejects limit > 100', () => {
     expect(() => paginationSchema.parse({ limit: 200 })).toThrow();
+  });
+});
+
+describe('updateCustomerSchema', () => {
+  it('accepts null for email, phone, and notes to clear them in edit mode', () => {
+    const parsed = updateCustomerSchema.parse({
+      email: null,
+      phone: null,
+      notes: null,
+    });
+    expect(parsed.email).toBeNull();
+    expect(parsed.phone).toBeNull();
+    expect(parsed.notes).toBeNull();
+  });
+
+  it('accepts omitting fields', () => {
+    const parsed = updateCustomerSchema.parse({ name: 'Updated Corp' });
+    expect(parsed.name).toBe('Updated Corp');
+    expect(parsed.email).toBeUndefined();
   });
 });

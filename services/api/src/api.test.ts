@@ -41,6 +41,13 @@ const { mockVerifyIdToken, mockPrisma } = vi.hoisted(() => {
       create: vi.fn(),
       updateMany: vi.fn(),
     },
+    customer: {
+      create: vi.fn(),
+      findMany: vi.fn(),
+      findUnique: vi.fn(),
+      count: vi.fn(),
+      updateMany: vi.fn(),
+    },
     auditEvent: {
       create: vi.fn(),
     },
@@ -124,6 +131,11 @@ function clearMocks() {
   mockPrisma.workspace.findUnique.mockReset();
   mockPrisma.workspaceMember.findUnique.mockReset();
   mockPrisma.workspaceMember.findMany.mockReset();
+  mockPrisma.customer.create.mockReset();
+  mockPrisma.customer.findMany.mockReset();
+  mockPrisma.customer.findUnique.mockReset();
+  mockPrisma.customer.count.mockReset();
+  mockPrisma.customer.updateMany.mockReset();
   mockPrisma.$transaction.mockReset();
 }
 
@@ -442,6 +454,325 @@ describe('POST /workspaces — input validation', () => {
       .send({ name: 'My Workspace', slug: 'my-workspace' });
     expect(res.status).toBe(201);
     expect(res.body.workspace.slug).toBe('my-workspace');
+  });
+});
+
+describe('Customer CRUD and permissions', () => {
+  const CUST_BASE = `/workspaces/${WS_A}/customers`;
+
+  beforeEach(() => {
+    clearMocks();
+    setValidToken();
+    setMembership(WS_A, 'member');
+    mockPrisma.user.findUnique.mockResolvedValue({ id: DB_USER_ID });
+  });
+
+  it('POST — creates a customer for workspace A (member role)', async () => {
+    const createdCustomer = {
+      id: 'cust-1',
+      name: 'Acme Corp',
+      email: 'info@acme.com',
+      phone: null,
+      notes: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    mockPrisma.customer.create.mockResolvedValue(createdCustomer);
+    const res = await request(app)
+      .post(CUST_BASE)
+      .set('Authorization', 'Bearer valid.token')
+      .send({ name: 'Acme Corp', email: 'info@acme.com' });
+    expect(res.status).toBe(201);
+    expect(res.body.customer).toMatchObject({ id: 'cust-1', name: 'Acme Corp' });
+    expect(mockPrisma.customer.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          workspaceId: WS_A,
+          name: 'Acme Corp',
+          email: 'info@acme.com',
+        }),
+      }),
+    );
+  });
+
+  it('POST — validation error when name missing', async () => {
+    const res = await request(app)
+      .post(CUST_BASE)
+      .set('Authorization', 'Bearer valid.token')
+      .send({ email: 'no-name@example.com' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('validation_error');
+    expect(res.body.issues).toHaveProperty('name');
+  });
+
+  it('GET — lists customers with pagination defaults', async () => {
+    const mockList = [
+      { id: 'c1', name: 'C1' },
+      { id: 'c2', name: 'C2' },
+    ];
+    mockPrisma.customer.findMany.mockResolvedValue(mockList);
+    mockPrisma.customer.count.mockResolvedValue(2);
+    const res = await request(app).get(CUST_BASE).set('Authorization', 'Bearer valid.token');
+    expect(res.status).toBe(200);
+    expect(res.body.customers).toHaveLength(2);
+    expect(res.body.pagination).toMatchObject({ page: 1, limit: 20, total: 2 });
+  });
+
+  it('GET /:id — retrieves a customer in same workspace', async () => {
+    const cust = {
+      id: 'c1',
+      name: 'C1',
+      email: null,
+      phone: null,
+      notes: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    mockPrisma.customer.findUnique.mockResolvedValue(cust);
+    const res = await request(app)
+      .get(`${CUST_BASE}/c1`)
+      .set('Authorization', 'Bearer valid.token');
+    expect(res.status).toBe(200);
+    expect(res.body.customer).toMatchObject({ id: 'c1', name: 'C1' });
+  });
+
+  it('PATCH /:id — admin can update', async () => {
+    setMembership(WS_A, 'admin');
+    mockPrisma.customer.updateMany.mockResolvedValue({ count: 1 });
+    const updated = {
+      id: 'c1',
+      name: 'New Name',
+      email: null,
+      phone: null,
+      notes: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    mockPrisma.customer.findUnique.mockResolvedValue(updated);
+    const res = await request(app)
+      .patch(`${CUST_BASE}/c1`)
+      .set('Authorization', 'Bearer valid.token')
+      .send({ name: 'New Name' });
+    expect(res.status).toBe(200);
+    expect(res.body.customer.name).toBe('New Name');
+  });
+
+  it('PATCH /:id — admin can clear optional fields by sending null', async () => {
+    setMembership(WS_A, 'admin');
+    mockPrisma.customer.updateMany.mockResolvedValue({ count: 1 });
+    const cleared = {
+      id: 'c1',
+      name: 'Existing Name',
+      email: null,
+      phone: null,
+      notes: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    mockPrisma.customer.findUnique.mockResolvedValue(cleared);
+    const res = await request(app)
+      .patch(`${CUST_BASE}/c1`)
+      .set('Authorization', 'Bearer valid.token')
+      .send({ email: null, phone: null, notes: null });
+    expect(res.status).toBe(200);
+    expect(mockPrisma.customer.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          email: null,
+          phone: null,
+          notes: null,
+        }),
+      }),
+    );
+  });
+
+  it('DELETE /:id — admin can archive', async () => {
+    setMembership(WS_A, 'admin');
+    mockPrisma.customer.updateMany.mockResolvedValue({ count: 1 });
+    const res = await request(app)
+      .delete(`${CUST_BASE}/c1`)
+      .set('Authorization', 'Bearer valid.token');
+    expect(res.status).toBe(204);
+  });
+
+  it('Cross-workspace isolation — cannot access customer from another workspace', async () => {
+    mockPrisma.customer.findUnique.mockResolvedValue(null);
+    const res = await request(app)
+      .get(`${CUST_BASE}/c-other`)
+      .set('Authorization', 'Bearer valid.token');
+    expect(res.status).toBe(404);
+  });
+
+  it('Viewer role cannot create a customer', async () => {
+    setMembership(WS_A, 'viewer');
+    const res = await request(app)
+      .post(CUST_BASE)
+      .set('Authorization', 'Bearer valid.token')
+      .send({ name: 'Nope' });
+    expect(res.status).toBe(403);
+  });
+
+  // ── Pagination ──────────────────────────────────────────────────────────
+
+  it('GET — custom page and limit', async () => {
+    mockPrisma.customer.findMany.mockResolvedValue([]);
+    mockPrisma.customer.count.mockResolvedValue(0);
+    const res = await request(app)
+      .get(`${CUST_BASE}?page=3&limit=5`)
+      .set('Authorization', 'Bearer valid.token');
+    expect(res.status).toBe(200);
+    expect(res.body.pagination).toMatchObject({ page: 3, limit: 5, total: 0 });
+  });
+
+  it('GET — invalid limit (>100) returns 400 validation error', async () => {
+    const res = await request(app)
+      .get(`${CUST_BASE}?limit=500`)
+      .set('Authorization', 'Bearer valid.token');
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('validation_error');
+    expect(res.body.issues).toHaveProperty('limit');
+  });
+
+  it('GET — invalid page (<=0) returns 400 validation error', async () => {
+    const res = await request(app)
+      .get(`${CUST_BASE}?page=0`)
+      .set('Authorization', 'Bearer valid.token');
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('validation_error');
+    expect(res.body.issues).toHaveProperty('page');
+  });
+
+  // ── Archived customer visibility ────────────────────────────────────────
+
+  it('GET /:id — archived customer returns 404', async () => {
+    mockPrisma.customer.findUnique.mockResolvedValue(null);
+    const res = await request(app)
+      .get(`${CUST_BASE}/archived-id`)
+      .set('Authorization', 'Bearer valid.token');
+    expect(res.status).toBe(404);
+    expect(res.body.error).toBe('not_found');
+  });
+
+  it('DELETE /:id — already-archived returns 404', async () => {
+    setMembership(WS_A, 'admin');
+    mockPrisma.customer.updateMany.mockResolvedValue({ count: 0 });
+    const res = await request(app)
+      .delete(`${CUST_BASE}/already-gone`)
+      .set('Authorization', 'Bearer valid.token');
+    expect(res.status).toBe(404);
+    expect(res.body.error).toBe('not_found');
+  });
+
+  // ── Role permissions ────────────────────────────────────────────────────
+
+  it('Member role cannot update a customer (requires admin+)', async () => {
+    setMembership(WS_A, 'member');
+    const res = await request(app)
+      .patch(`${CUST_BASE}/c1`)
+      .set('Authorization', 'Bearer valid.token')
+      .send({ name: 'Updated' });
+    expect(res.status).toBe(403);
+  });
+
+  it('Member role cannot archive a customer (requires admin+)', async () => {
+    setMembership(WS_A, 'member');
+    const res = await request(app)
+      .delete(`${CUST_BASE}/c1`)
+      .set('Authorization', 'Bearer valid.token');
+    expect(res.status).toBe(403);
+  });
+
+  it('Viewer role cannot update a customer', async () => {
+    setMembership(WS_A, 'viewer');
+    const res = await request(app)
+      .patch(`${CUST_BASE}/c1`)
+      .set('Authorization', 'Bearer valid.token')
+      .send({ name: 'Updated' });
+    expect(res.status).toBe(403);
+  });
+
+  it('Viewer role cannot archive a customer', async () => {
+    setMembership(WS_A, 'viewer');
+    const res = await request(app)
+      .delete(`${CUST_BASE}/c1`)
+      .set('Authorization', 'Bearer valid.token');
+    expect(res.status).toBe(403);
+  });
+
+  // ── Cross-workspace isolation (write paths) ─────────────────────────────
+
+  it('PATCH /:id — cannot update customer from another workspace', async () => {
+    setMembership(WS_A, 'admin');
+    mockPrisma.customer.updateMany.mockResolvedValue({ count: 0 });
+    const res = await request(app)
+      .patch(`${CUST_BASE}/ws-b-cust`)
+      .set('Authorization', 'Bearer valid.token')
+      .send({ name: 'Stolen' });
+    expect(res.status).toBe(404);
+  });
+
+  // ── Database error handling ─────────────────────────────────────────────
+
+  it('POST — database error returns safe 500', async () => {
+    mockPrisma.customer.create.mockRejectedValue(new Error('connection refused'));
+    const res = await request(app)
+      .post(CUST_BASE)
+      .set('Authorization', 'Bearer valid.token')
+      .send({ name: 'Will Fail' });
+    expect(res.status).toBe(500);
+    expect(res.body.error).toBe('internal_server_error');
+    // Must not leak internal details
+    expect(res.body.message).not.toContain('connection refused');
+  });
+
+  it('GET — database error returns safe 500', async () => {
+    mockPrisma.customer.findMany.mockRejectedValue(new Error('timeout'));
+    const res = await request(app).get(CUST_BASE).set('Authorization', 'Bearer valid.token');
+    expect(res.status).toBe(500);
+    expect(res.body.error).toBe('internal_server_error');
+  });
+
+  // ── Authentication ──────────────────────────────────────────────────────
+
+  it('POST — unauthenticated request rejected', async () => {
+    const res = await request(app).post(CUST_BASE).send({ name: 'No Auth' });
+    expect(res.status).toBe(401);
+  });
+
+  it('GET — unauthenticated request rejected', async () => {
+    const res = await request(app).get(CUST_BASE);
+    expect(res.status).toBe(401);
+  });
+
+  // ── Validation edge cases ───────────────────────────────────────────────
+
+  it('POST — name too short', async () => {
+    const res = await request(app)
+      .post(CUST_BASE)
+      .set('Authorization', 'Bearer valid.token')
+      .send({ name: 'A' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('validation_error');
+  });
+
+  it('PATCH /:id — invalid email in update', async () => {
+    setMembership(WS_A, 'admin');
+    const res = await request(app)
+      .patch(`${CUST_BASE}/c1`)
+      .set('Authorization', 'Bearer valid.token')
+      .send({ email: 'not-an-email' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('validation_error');
+  });
+
+  it('PATCH /:id — update not found returns 404', async () => {
+    setMembership(WS_A, 'admin');
+    mockPrisma.customer.updateMany.mockResolvedValue({ count: 0 });
+    const res = await request(app)
+      .patch(`${CUST_BASE}/nonexistent`)
+      .set('Authorization', 'Bearer valid.token')
+      .send({ name: 'Ghost' });
+    expect(res.status).toBe(404);
   });
 });
 
