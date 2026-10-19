@@ -7,3 +7,5 @@ coverage/
 .agents/
 skills-lock.json
 **/.gitkeep
+results.sarif
+*.sarif
