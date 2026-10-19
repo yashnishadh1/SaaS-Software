@@ -19,7 +19,6 @@ description = "Paths and values that are safe to ignore"
 paths = [
   ".env.example",
   "docs/",
-  "*.md",
 ]
 regexes = [
   # Placeholder patterns used in .env.example and docs
