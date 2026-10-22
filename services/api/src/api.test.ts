@@ -48,6 +48,14 @@ const { mockVerifyIdToken, mockPrisma } = vi.hoisted(() => {
       count: vi.fn(),
       updateMany: vi.fn(),
     },
+    task: {
+      create: vi.fn(),
+      findMany: vi.fn(),
+      findFirst: vi.fn(),
+      findUnique: vi.fn(),
+      count: vi.fn(),
+      updateMany: vi.fn(),
+    },
     auditEvent: {
       create: vi.fn(),
     },
@@ -136,6 +144,12 @@ function clearMocks() {
   mockPrisma.customer.findUnique.mockReset();
   mockPrisma.customer.count.mockReset();
   mockPrisma.customer.updateMany.mockReset();
+  mockPrisma.task.create.mockReset();
+  mockPrisma.task.findMany.mockReset();
+  mockPrisma.task.findFirst.mockReset();
+  mockPrisma.task.findUnique.mockReset();
+  mockPrisma.task.count.mockReset();
+  mockPrisma.task.updateMany.mockReset();
   mockPrisma.$transaction.mockReset();
 }
 
@@ -772,6 +786,451 @@ describe('Customer CRUD and permissions', () => {
       .patch(`${CUST_BASE}/nonexistent`)
       .set('Authorization', 'Bearer valid.token')
       .send({ name: 'Ghost' });
+    expect(res.status).toBe(404);
+  });
+});
+
+describe('Task CRUD, filtering, assignee validation, and permissions', () => {
+  const TASK_BASE = `/workspaces/${WS_A}/tasks`;
+
+  beforeEach(() => {
+    clearMocks();
+    setValidToken();
+    setMembership(WS_A, 'member');
+    mockPrisma.user.findUnique.mockResolvedValue({ id: DB_USER_ID });
+  });
+
+  it('POST — creates a task with minimal payload and defaults (member role)', async () => {
+    const createdTask = {
+      id: 'task-1',
+      title: 'Setup repository',
+      description: null,
+      status: 'todo',
+      priority: 'medium',
+      dueDate: null,
+      assigneeId: null,
+      assignee: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    mockPrisma.task.create.mockResolvedValue(createdTask);
+
+    const res = await request(app)
+      .post(TASK_BASE)
+      .set('Authorization', 'Bearer valid.token')
+      .send({ title: 'Setup repository' });
+
+    expect(res.status).toBe(201);
+    expect(res.body.task).toMatchObject({
+      id: 'task-1',
+      title: 'Setup repository',
+      status: 'todo',
+      priority: 'medium',
+    });
+    expect(mockPrisma.task.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          workspaceId: WS_A,
+          title: 'Setup repository',
+          status: 'todo',
+          priority: 'medium',
+          assigneeId: null,
+        }),
+      }),
+    );
+  });
+
+  it('POST — creates task with valid assignee in the workspace', async () => {
+    const ASSIGNEE_ID = 'user-bob-id';
+    mockPrisma.workspaceMember.findUnique.mockImplementation(
+      ({ where }: { where: { workspaceId_userId: { workspaceId: string; userId: string } } }) => {
+        if (
+          where.workspaceId_userId.workspaceId === WS_A &&
+          where.workspaceId_userId.userId === ASSIGNEE_ID
+        ) {
+          return Promise.resolve({ role: 'member' });
+        }
+        if (
+          where.workspaceId_userId.workspaceId === WS_A &&
+          where.workspaceId_userId.userId === DB_USER_ID
+        ) {
+          return Promise.resolve({ role: 'member' });
+        }
+        return Promise.resolve(null);
+      },
+    );
+
+    const createdTask = {
+      id: 'task-2',
+      title: 'Assigned task',
+      description: 'Check details',
+      status: 'in_progress',
+      priority: 'high',
+      dueDate: new Date('2026-11-01T00:00:00.000Z'),
+      assigneeId: ASSIGNEE_ID,
+      assignee: { id: ASSIGNEE_ID, email: 'bob@example.com', displayName: 'Bob', avatarUrl: null },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    mockPrisma.task.create.mockResolvedValue(createdTask);
+
+    const res = await request(app).post(TASK_BASE).set('Authorization', 'Bearer valid.token').send({
+      title: 'Assigned task',
+      description: 'Check details',
+      status: 'in_progress',
+      priority: 'high',
+      dueDate: '2026-11-01T00:00:00.000Z',
+      assigneeId: ASSIGNEE_ID,
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body.task.assigneeId).toBe(ASSIGNEE_ID);
+  });
+
+  it('POST — rejects assignee who does NOT belong to the workspace', async () => {
+    const INVALID_ASSIGNEE = 'user-outsider-id';
+    mockPrisma.workspaceMember.findUnique.mockImplementation(
+      ({ where }: { where: { workspaceId_userId: { workspaceId: string; userId: string } } }) => {
+        // Current caller is member of WS_A
+        if (
+          where.workspaceId_userId.workspaceId === WS_A &&
+          where.workspaceId_userId.userId === DB_USER_ID
+        ) {
+          return Promise.resolve({ role: 'member' });
+        }
+        // Outsider is NOT in WS_A
+        return Promise.resolve(null);
+      },
+    );
+
+    const res = await request(app).post(TASK_BASE).set('Authorization', 'Bearer valid.token').send({
+      title: 'Unauthorized assignment',
+      assigneeId: INVALID_ASSIGNEE,
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('validation_error');
+    expect(res.body.message).toContain('Assignee must be an active member of this workspace');
+    expect(mockPrisma.task.create).not.toHaveBeenCalled();
+  });
+
+  it('POST — rejects empty or whitespace-only title', async () => {
+    const res = await request(app)
+      .post(TASK_BASE)
+      .set('Authorization', 'Bearer valid.token')
+      .send({ title: '   ' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('validation_error');
+    expect(res.body.issues).toHaveProperty('title');
+  });
+
+  it('POST — rejects invalid status or priority', async () => {
+    const res = await request(app)
+      .post(TASK_BASE)
+      .set('Authorization', 'Bearer valid.token')
+      .send({ title: 'Valid title', status: 'unknown_status' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('validation_error');
+    expect(res.body.issues).toHaveProperty('status');
+  });
+
+  it('POST — viewer role cannot create tasks', async () => {
+    setMembership(WS_A, 'viewer');
+    const res = await request(app)
+      .post(TASK_BASE)
+      .set('Authorization', 'Bearer valid.token')
+      .send({ title: 'Viewer trying to create' });
+
+    expect(res.status).toBe(403);
+  });
+
+  it('POST — unauthenticated request rejected', async () => {
+    const res = await request(app).post(TASK_BASE).send({ title: 'No token' });
+    expect(res.status).toBe(401);
+  });
+
+  it('POST — database failure returns safe 500 without leaking error details', async () => {
+    mockPrisma.task.create.mockRejectedValue(new Error('fatal db error'));
+    const res = await request(app)
+      .post(TASK_BASE)
+      .set('Authorization', 'Bearer valid.token')
+      .send({ title: 'Fail task' });
+
+    expect(res.status).toBe(500);
+    expect(res.body.error).toBe('internal_server_error');
+    expect(res.body.message).not.toContain('fatal db error');
+  });
+
+  // ── GET list ────────────────────────────────────────────────────────────
+
+  it('GET — lists tasks with pagination defaults (viewer role)', async () => {
+    setMembership(WS_A, 'viewer');
+    const mockTasks = [
+      {
+        id: 't1',
+        title: 'Task 1',
+        status: 'todo',
+        priority: 'medium',
+        assignee: null,
+        createdAt: new Date(),
+      },
+      {
+        id: 't2',
+        title: 'Task 2',
+        status: 'done',
+        priority: 'high',
+        assignee: null,
+        createdAt: new Date(),
+      },
+    ];
+    mockPrisma.task.findMany.mockResolvedValue(mockTasks);
+    mockPrisma.task.count.mockResolvedValue(2);
+
+    const res = await request(app).get(TASK_BASE).set('Authorization', 'Bearer valid.token');
+
+    expect(res.status).toBe(200);
+    expect(res.body.tasks).toHaveLength(2);
+    expect(res.body.pagination).toMatchObject({ page: 1, limit: 20, total: 2 });
+    expect(mockPrisma.task.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ workspaceId: WS_A, archived: false }),
+        skip: 0,
+        take: 20,
+      }),
+    );
+  });
+
+  it('GET — filters by status, priority, assigneeId, and search keyword', async () => {
+    setMembership(WS_A, 'viewer');
+    mockPrisma.task.findMany.mockResolvedValue([]);
+    mockPrisma.task.count.mockResolvedValue(0);
+
+    const res = await request(app)
+      .get(`${TASK_BASE}?status=in_progress&priority=urgent&assigneeId=user-1&search=security`)
+      .set('Authorization', 'Bearer valid.token');
+
+    expect(res.status).toBe(200);
+    expect(mockPrisma.task.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          workspaceId: WS_A,
+          archived: false,
+          status: 'in_progress',
+          priority: 'urgent',
+          assigneeId: 'user-1',
+          OR: [
+            { title: { contains: 'security', mode: 'insensitive' } },
+            { description: { contains: 'security', mode: 'insensitive' } },
+          ],
+        }),
+      }),
+    );
+  });
+
+  it('GET — invalid pagination limit or page returns 400', async () => {
+    const res = await request(app)
+      .get(`${TASK_BASE}?limit=200`)
+      .set('Authorization', 'Bearer valid.token');
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('validation_error');
+    expect(res.body.issues).toHaveProperty('limit');
+  });
+
+  // ── GET single task ─────────────────────────────────────────────────────
+
+  it('GET /:taskId — retrieves single task for viewer', async () => {
+    setMembership(WS_A, 'viewer');
+    const task = {
+      id: 'task-1',
+      title: 'Detailed Task',
+      description: 'More info',
+      status: 'todo',
+      priority: 'low',
+      dueDate: null,
+      assigneeId: null,
+      assignee: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    mockPrisma.task.findFirst.mockResolvedValue(task);
+
+    const res = await request(app)
+      .get(`${TASK_BASE}/task-1`)
+      .set('Authorization', 'Bearer valid.token');
+
+    expect(res.status).toBe(200);
+    expect(res.body.task.title).toBe('Detailed Task');
+    expect(mockPrisma.task.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'task-1', workspaceId: WS_A, archived: false },
+      }),
+    );
+  });
+
+  it('GET /:taskId — returns 404 for task from another workspace (tenant isolation)', async () => {
+    mockPrisma.task.findFirst.mockResolvedValue(null);
+
+    const res = await request(app)
+      .get(`${TASK_BASE}/other-workspace-task`)
+      .set('Authorization', 'Bearer valid.token');
+
+    expect(res.status).toBe(404);
+    expect(res.body.error).toBe('not_found');
+  });
+
+  // ── PATCH update task ───────────────────────────────────────────────────
+
+  it('PATCH /:taskId — member can update task status and priority', async () => {
+    mockPrisma.task.updateMany.mockResolvedValue({ count: 1 });
+    const updated = {
+      id: 'task-1',
+      title: 'Setup repository',
+      status: 'done',
+      priority: 'urgent',
+    };
+    mockPrisma.task.findUnique.mockResolvedValue(updated);
+
+    const res = await request(app)
+      .patch(`${TASK_BASE}/task-1`)
+      .set('Authorization', 'Bearer valid.token')
+      .send({ status: 'done', priority: 'urgent' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.task.status).toBe('done');
+    expect(mockPrisma.task.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'task-1', workspaceId: WS_A, archived: false },
+        data: expect.objectContaining({ status: 'done', priority: 'urgent' }),
+      }),
+    );
+  });
+
+  it('PATCH /:taskId — member can clear optional fields with null', async () => {
+    mockPrisma.task.updateMany.mockResolvedValue({ count: 1 });
+    mockPrisma.task.findUnique.mockResolvedValue({
+      id: 'task-1',
+      description: null,
+      dueDate: null,
+      assigneeId: null,
+    });
+
+    const res = await request(app)
+      .patch(`${TASK_BASE}/task-1`)
+      .set('Authorization', 'Bearer valid.token')
+      .send({ description: null, dueDate: null, assigneeId: null });
+
+    expect(res.status).toBe(200);
+    expect(mockPrisma.task.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'task-1', workspaceId: WS_A, archived: false },
+        data: expect.objectContaining({ description: null, dueDate: null, assigneeId: null }),
+      }),
+    );
+  });
+
+  it('PATCH /:taskId — rejects reassignment to non-member of workspace', async () => {
+    mockPrisma.workspaceMember.findUnique.mockImplementation(
+      ({ where }: { where: { workspaceId_userId: { workspaceId: string; userId: string } } }) => {
+        if (
+          where.workspaceId_userId.workspaceId === WS_A &&
+          where.workspaceId_userId.userId === DB_USER_ID
+        ) {
+          return Promise.resolve({ role: 'member' });
+        }
+        return Promise.resolve(null);
+      },
+    );
+
+    const res = await request(app)
+      .patch(`${TASK_BASE}/task-1`)
+      .set('Authorization', 'Bearer valid.token')
+      .send({ assigneeId: 'outsider-id' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('validation_error');
+    expect(res.body.message).toContain('Assignee must be an active member of this workspace');
+    expect(mockPrisma.task.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('PATCH /:taskId — viewer role cannot update tasks', async () => {
+    setMembership(WS_A, 'viewer');
+    const res = await request(app)
+      .patch(`${TASK_BASE}/task-1`)
+      .set('Authorization', 'Bearer valid.token')
+      .send({ status: 'done' });
+
+    expect(res.status).toBe(403);
+  });
+
+  it('PATCH /:taskId — cross-workspace isolation (cannot update other workspace task)', async () => {
+    mockPrisma.task.updateMany.mockResolvedValue({ count: 0 });
+
+    const res = await request(app)
+      .patch(`${TASK_BASE}/other-ws-task`)
+      .set('Authorization', 'Bearer valid.token')
+      .send({ title: 'Compromised title' });
+
+    expect(res.status).toBe(404);
+  });
+
+  // ── DELETE archive task ─────────────────────────────────────────────────
+
+  it('DELETE /:taskId — admin can archive task (returns 204)', async () => {
+    setMembership(WS_A, 'admin');
+    mockPrisma.task.updateMany.mockResolvedValue({ count: 1 });
+
+    const res = await request(app)
+      .delete(`${TASK_BASE}/task-1`)
+      .set('Authorization', 'Bearer valid.token');
+
+    expect(res.status).toBe(204);
+    expect(mockPrisma.task.updateMany).toHaveBeenCalledWith({
+      where: { id: 'task-1', workspaceId: WS_A, archived: false },
+      data: { archived: true },
+    });
+  });
+
+  it('DELETE /:taskId — member cannot archive task (requires admin+)', async () => {
+    setMembership(WS_A, 'member');
+    const res = await request(app)
+      .delete(`${TASK_BASE}/task-1`)
+      .set('Authorization', 'Bearer valid.token');
+
+    expect(res.status).toBe(403);
+  });
+
+  it('DELETE /:taskId — viewer cannot archive task', async () => {
+    setMembership(WS_A, 'viewer');
+    const res = await request(app)
+      .delete(`${TASK_BASE}/task-1`)
+      .set('Authorization', 'Bearer valid.token');
+
+    expect(res.status).toBe(403);
+  });
+
+  it('DELETE /:taskId — already archived task returns 404', async () => {
+    setMembership(WS_A, 'admin');
+    mockPrisma.task.updateMany.mockResolvedValue({ count: 0 });
+
+    const res = await request(app)
+      .delete(`${TASK_BASE}/already-archived`)
+      .set('Authorization', 'Bearer valid.token');
+
+    expect(res.status).toBe(404);
+    expect(res.body.error).toBe('not_found');
+  });
+
+  it('DELETE /:taskId — cross-workspace isolation (cannot archive other workspace task)', async () => {
+    setMembership(WS_A, 'admin');
+    mockPrisma.task.updateMany.mockResolvedValue({ count: 0 });
+
+    const res = await request(app)
+      .delete(`${TASK_BASE}/other-ws-task`)
+      .set('Authorization', 'Bearer valid.token');
+
     expect(res.status).toBe(404);
   });
 });

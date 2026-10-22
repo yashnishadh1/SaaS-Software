@@ -35,6 +35,12 @@ export function Navigation() {
           >
             Customers
           </NavLink>
+          <NavLink
+            to="/tasks"
+            className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
+          >
+            Tasks
+          </NavLink>
         </nav>
       </div>
 

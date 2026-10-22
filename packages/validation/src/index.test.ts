@@ -6,6 +6,9 @@ import {
   passwordSchema,
   slugSchema,
   updateCustomerSchema,
+  createTaskSchema,
+  updateTaskSchema,
+  taskQuerySchema,
 } from './index.js';
 
 describe('emailSchema', () => {
@@ -97,5 +100,82 @@ describe('updateCustomerSchema', () => {
     const parsed = updateCustomerSchema.parse({ name: 'Updated Corp' });
     expect(parsed.name).toBe('Updated Corp');
     expect(parsed.email).toBeUndefined();
+  });
+});
+
+describe('createTaskSchema', () => {
+  it('validates a minimal task with defaults for status and priority', () => {
+    const result = createTaskSchema.parse({ title: 'Complete onboarding' });
+    expect(result.title).toBe('Complete onboarding');
+    expect(result.status).toBe('todo');
+    expect(result.priority).toBe('medium');
+    expect(result.description).toBeUndefined();
+    expect(result.dueDate).toBeUndefined();
+    expect(result.assigneeId).toBeUndefined();
+  });
+
+  it('accepts full valid task input', () => {
+    const result = createTaskSchema.parse({
+      title: 'Fix issue',
+      description: 'Detailed description',
+      status: 'in_progress',
+      priority: 'urgent',
+      dueDate: '2026-11-01T12:00:00.000Z',
+      assigneeId: 'user-cuid-123',
+    });
+    expect(result.status).toBe('in_progress');
+    expect(result.priority).toBe('urgent');
+    expect(result.dueDate).toBe('2026-11-01T12:00:00.000Z');
+    expect(result.assigneeId).toBe('user-cuid-123');
+  });
+
+  it('rejects empty title', () => {
+    expect(() => createTaskSchema.parse({ title: '' })).toThrow();
+    expect(() => createTaskSchema.parse({ title: '   ' })).toThrow();
+  });
+
+  it('rejects invalid status and priority', () => {
+    expect(() => createTaskSchema.parse({ title: 'Task', status: 'invalid_status' })).toThrow();
+    expect(() => createTaskSchema.parse({ title: 'Task', priority: 'super_high' })).toThrow();
+  });
+
+  it('rejects invalid dueDate', () => {
+    expect(() => createTaskSchema.parse({ title: 'Task', dueDate: 'invalid-date' })).toThrow();
+  });
+});
+
+describe('updateTaskSchema', () => {
+  it('allows partial updates and nullable fields to clear values', () => {
+    const result = updateTaskSchema.parse({
+      status: 'done',
+      dueDate: null,
+      assigneeId: null,
+      description: null,
+    });
+    expect(result.status).toBe('done');
+    expect(result.dueDate).toBeNull();
+    expect(result.assigneeId).toBeNull();
+    expect(result.description).toBeNull();
+  });
+
+  it('rejects empty title if provided', () => {
+    expect(() => updateTaskSchema.parse({ title: '   ' })).toThrow();
+  });
+});
+
+describe('taskQuerySchema', () => {
+  it('parses query filters and applies pagination defaults', () => {
+    const result = taskQuerySchema.parse({
+      status: 'in_progress',
+      priority: 'high',
+      search: 'audit',
+      page: '2',
+      limit: '50',
+    });
+    expect(result.status).toBe('in_progress');
+    expect(result.priority).toBe('high');
+    expect(result.search).toBe('audit');
+    expect(result.page).toBe(2);
+    expect(result.limit).toBe(50);
   });
 });

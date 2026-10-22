@@ -86,3 +86,60 @@ export const updateCustomerSchema = z.object({
 });
 
 export type UpdateCustomerInput = z.infer<typeof updateCustomerSchema>;
+
+// ── Tasks schemas (Phase 4) ──────────────────────────────────────────────────
+
+export const taskStatusSchema = z.enum(['todo', 'in_progress', 'done', 'cancelled']);
+export type TaskStatusInput = z.infer<typeof taskStatusSchema>;
+
+export const taskPrioritySchema = z.enum(['low', 'medium', 'high', 'urgent']);
+export type TaskPriorityInput = z.infer<typeof taskPrioritySchema>;
+
+export const isoDateSchema = z
+  .string()
+  .refine((val) => !isNaN(Date.parse(val)), { message: 'Must be a valid date or datetime string' });
+
+export const createTaskSchema = z.object({
+  title: z
+    .string()
+    .trim()
+    .min(1, 'Title is required')
+    .max(200, 'Title cannot exceed 200 characters'),
+  description: z.string().trim().max(2000, 'Description cannot exceed 2000 characters').optional(),
+  status: taskStatusSchema.default('todo'),
+  priority: taskPrioritySchema.default('medium'),
+  dueDate: isoDateSchema.nullable().optional(),
+  assigneeId: z.string().trim().min(1, 'Assignee ID cannot be empty').nullable().optional(),
+});
+
+export type CreateTaskInput = z.infer<typeof createTaskSchema>;
+
+export const updateTaskSchema = z.object({
+  title: z
+    .string()
+    .trim()
+    .min(1, 'Title is required')
+    .max(200, 'Title cannot exceed 200 characters')
+    .optional(),
+  description: z
+    .string()
+    .trim()
+    .max(2000, 'Description cannot exceed 2000 characters')
+    .nullable()
+    .optional(),
+  status: taskStatusSchema.optional(),
+  priority: taskPrioritySchema.optional(),
+  dueDate: isoDateSchema.nullable().optional(),
+  assigneeId: z.string().trim().min(1, 'Assignee ID cannot be empty').nullable().optional(),
+});
+
+export type UpdateTaskInput = z.infer<typeof updateTaskSchema>;
+
+export const taskQuerySchema = paginationSchema.extend({
+  status: taskStatusSchema.optional(),
+  priority: taskPrioritySchema.optional(),
+  assigneeId: z.string().trim().min(1).optional(),
+  search: z.string().trim().max(100).optional(),
+});
+
+export type TaskQuery = z.infer<typeof taskQuerySchema>;

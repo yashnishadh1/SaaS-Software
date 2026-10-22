@@ -5,7 +5,8 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     env: {
-      DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/bizflow_test',
+      DATABASE_URL:
+        process.env['DATABASE_URL'] ?? 'postgresql://postgres:postgres@localhost:5432/bizflow_test',
       FIREBASE_PROJECT_ID: 'test-project',
       NODE_ENV: 'test',
     },

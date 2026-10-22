@@ -44,6 +44,27 @@ export function DashboardPage() {
               Manage Customers &rarr;
             </Link>
           </div>
+
+          <div className="table-wrapper" style={{ padding: '1.5rem' }}>
+            <h3
+              style={{ fontSize: '1.25rem', marginBottom: '0.5rem', color: 'var(--text-primary)' }}
+            >
+              ✅ Task Management
+            </h3>
+            <p
+              style={{
+                color: 'var(--text-secondary)',
+                fontSize: '0.9375rem',
+                marginBottom: '1.25rem',
+              }}
+            >
+              Organize, assign, and track workspace tasks with priority levels, due dates, and
+              status workflows.
+            </p>
+            <Link to="/tasks" className="btn btn-primary btn-sm">
+              Manage Tasks &rarr;
+            </Link>
+          </div>
         </div>
       </main>
     </div>
