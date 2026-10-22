@@ -26,9 +26,9 @@ describe('Live PostgreSQL Tasks Integration & Tenant Isolation', () => {
 
   it('enforces multi-tenant workspace isolation for tasks in real PostgreSQL', async (ctx) => {
     if (!isDbConnected) {
-      if (process.env['CI']) {
+      if (process.env['RUN_DB_TESTS'] === 'true') {
         throw new Error(
-          `PostgreSQL integration test failed to connect in CI: ${connectionError ?? 'unknown error'}`,
+          `PostgreSQL integration test failed to connect with RUN_DB_TESTS=true: ${connectionError ?? 'unknown error'}`,
         );
       }
       ctx.skip();

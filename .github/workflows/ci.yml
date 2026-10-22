@@ -111,6 +111,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Generate Prisma client
+        run: npm run db:generate
+
       - name: Run Prisma DB migrations against live PostgreSQL
         run: npm run db:migrate:deploy
         env:
@@ -122,3 +125,4 @@ jobs:
           NODE_ENV: test
           DATABASE_URL: postgresql://bizflow:test_secure_password_123@localhost:5432/bizflow_test
           FIREBASE_PROJECT_ID: test-project
+          RUN_DB_TESTS: 'true'
